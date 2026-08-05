@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.pytest_cache
+
+# Environment
+.env
+.env.local
+.env.*.local
+.venv
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+.gemini/
+*antigravity*
+antigravity-ide/
+*.system_generated/
+transcript*.jsonl
+
+# OS
+.DS_Store
+Thumbs.db
