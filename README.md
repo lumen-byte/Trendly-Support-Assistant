@@ -4,6 +4,17 @@ A production-grade, state-management-driven AI support agent and interactive das
 
 ---
 
+## Core Features
+
+- **Dynamic Intent-Based Authentication**: Unauthenticated guest users can freely search and ask general policy questions (RAG). Any transactional query (such as looking up order details, requesting refunds, or claiming delay credits) dynamically triggers contact verification, securing customer data.
+- **Deterministic Return Eligibility Engine**: All eligibility checks (30-day delivery window subtraction, hygiene category exclusions, final sale size-exchange rules, and footwear box deductions) are evaluated programmatically in pure Python. The LLM only translates these results into conversational explanations, preventing refund hallucinations.
+- **Advanced Policy QA RAG Engine**: Indexes the policy document by semantic section boundaries. Uses custom cosine similarity mapping with synonym query expansion (e.g. mapping "earrings" to "jewellery") to resolve natural queries without external binary database dependencies.
+- **Safety Interceptor Layer**: Scrubs incoming queries for credit cards, CVVs, and bank transfer routing codes. Filters jailbreak patterns and prompt injections, automatically locking sessions and triggering human escalation upon safety breaches.
+- **Cross-Customer Data Isolation**: Enforces security boundaries by verifying that the authenticated customer ID matches the requested order ID before exposing details.
+- **Interactive Live Dashboard**: A dual-panel interface displaying the active conversation alongside a developer-focused memory inspector showing variables, tool execution inputs/outputs, and active human escalation handoff cards.
+
+---
+
 ## Quick Start
 
 ### 1. Prerequisites
