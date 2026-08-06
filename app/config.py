@@ -17,7 +17,7 @@ SIMULATED_CURRENT_DATETIME = datetime(2026, 8, 5, 14, 0, 0)
 # LLM Configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-1.5-flash"
-EMBEDDING_MODEL = "models/text-embedding-004"
+EMBEDDING_MODEL = "models/embedding-001"
 
 # App settings
 DEBUG = True
