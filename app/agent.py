@@ -521,6 +521,46 @@ class AgentOrchestrator:
                             "response": f"Which item in order {order_id} would you like to return/exchange? The items are: {item_names}."
                         }
 
+
+        # 6.5. Order Cancellation Request
+        if "cancel" in msg or "cancle" in msg:
+            order_match = re.search(r'tr-\d{4}', msg)
+            order_id = order_match.group(0).upper() if order_match else session.current_order_id
+            
+            if order_id:
+                auth_plan = require_auth()
+                if auth_plan:
+                    return auth_plan
+                    
+                order = db_engine.get_order(order_id)
+                if order:
+                    if order.customer_id != session.customer_id:
+                        return {
+                            "tool_name": None,
+                            "response": "Access Denied: You are not authorized to cancel this order."
+                        }
+                        
+                    if order.status == "cancelled":
+                        return {
+                            "tool_name": None,
+                            "response": f"Order {order_id} has already been cancelled and refunded."
+                        }
+                    elif order.status in ["in_transit", "delivered", "partially_shipped", "delayed"]:
+                        return {
+                            "tool_name": None,
+                            "response": f"I cannot cancel order {order_id} because it has already been dispatched (current status: {order.status.replace('_', ' ').title()}). Once the package arrives, you can refuse delivery or initiate a return."
+                        }
+                    else:
+                        return {
+                            "tool_name": None,
+                            "response": f"I have successfully requested cancellation for order {order_id}. A refund will be processed following the standard refund timelines."
+                        }
+            else:
+                return {
+                    "tool_name": None,
+                    "response": "Which order would you like to cancel?"
+                }
+
         # 7. Delay Compensation Claim
         if "delay" in msg or "compensate" in msg or "late" in msg or "credit" in msg:
             auth_plan = require_auth()

@@ -49,6 +49,7 @@ class SessionResponse(BaseModel):
     escalation_summary: Optional[Dict[str, Any]]
     messages: List[Dict[str, str]]
     tool_traces: List[Dict[str, Any]]
+    llm_active: bool  # Exposes the orchestration mode (Gemini vs Fallback)
 
 class ChatResponse(BaseModel):
     response: str
@@ -70,7 +71,8 @@ def _format_session_response(session: ConversationSession) -> SessionResponse:
         escalation_reason=session.escalation_reason,
         escalation_summary=session.escalation_summary,
         messages=session.messages,
-        tool_traces=[t.dict() for t in session.tool_traces]
+        tool_traces=[t.dict() for t in session.tool_traces],
+        llm_active=orchestrator.use_api
     )
 
 # REST API Endpoints
@@ -160,6 +162,19 @@ async def serve_ui():
             backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
 <body class="text-gray-100 min-h-screen flex flex-col">
@@ -170,13 +185,23 @@ async def serve_ui():
             <div>
                 <h1 class="text-xl font-bold tracking-tight text-white flex items-center">
                     Trendly Support Assistant
-                    <span class="ml-2 px-2 py-0.5 text-xs rounded bg-green-500/20 text-green-400 font-semibold uppercase tracking-wider">Agent Ready</span>
+                    <span id="agent-mode-badge" class="ml-3"></span>
                 </h1>
                 <p class="text-xs text-gray-400">FDE Assessment - Production Grade Architecture Demonstration</p>
             </div>
         </div>
-        <div class="flex items-center space-x-4">
-            <span class="text-xs text-gray-400">Session ID: <strong id="session-display" class="text-yellow-400">trendly-web-demo</strong></span>
+        <div class="flex items-center space-x-5">
+            <!-- Simulated Date Badge -->
+            <div class="hidden sm:flex items-center space-x-2 bg-gray-900/60 border border-gray-800 px-3 py-1.5 rounded-xl text-xs text-gray-300">
+                <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+                <span>Simulated System Date: <strong>2026-08-05</strong></span>
+            </div>
+            <!-- Session Switcher -->
+            <div class="flex items-center space-x-2 bg-gray-900/60 border border-gray-850 px-3 py-1.5 rounded-xl">
+                <span class="text-xs text-gray-400">Session ID:</span>
+                <input type="text" id="session-input" value="trendly-web-demo" onchange="changeSession(this.value)" 
+                       class="bg-gray-950 border border-gray-800 rounded-lg px-2 py-0.5 text-xs text-yellow-400 font-bold focus:outline-none focus:border-yellow-500/80 w-32 text-center">
+            </div>
             <button onclick="resetSession()" class="px-3 py-1.5 rounded-lg border border-gray-700 hover:border-red-500 hover:text-red-400 text-xs transition duration-200 bg-gray-900/40">Reset State</button>
         </div>
     </header>
@@ -184,21 +209,21 @@ async def serve_ui():
     <!-- Main Content Grid -->
     <main class="flex-1 grid grid-cols-1 lg:grid-cols-3 p-6 gap-6 max-w-7xl mx-auto w-full overflow-hidden">
         
-        <!-- Left Panel: Session Memory State -->
-        <section class="glass-panel rounded-2xl p-5 flex flex-col space-y-4 shadow-xl">
+        <!-- Left Panel: Session Memory State & Test Cases -->
+        <section class="glass-panel rounded-2xl p-5 flex flex-col space-y-4 shadow-xl overflow-y-auto max-h-[82vh]">
             <h2 class="text-md font-semibold text-gray-300 uppercase tracking-wider border-b border-gray-800 pb-2">Active Memory State</h2>
             
             <!-- Auth Status -->
             <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-3">
                 <div class="flex justify-between items-center">
                     <span class="text-xs text-gray-400 uppercase tracking-wider font-medium">Authentication</span>
-                    <span id="state-auth" class="text-xs font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400">UNAUTHENTICATED</span>
+                    <span id="state-auth" class="text-xs font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-mono">UNAUTHENTICATED</span>
                 </div>
                 <div class="space-y-1.5">
                     <div class="flex justify-between text-xs"><span class="text-gray-400">Customer ID:</span><span id="state-cust-id" class="text-gray-200">-</span></div>
-                    <div class="flex justify-between text-xs"><span class="text-gray-400">Name:</span><span id="state-cust-name" class="text-gray-200">-</span></div>
-                    <div class="flex justify-between text-xs"><span class="text-gray-400">Email:</span><span id="state-cust-email" class="text-gray-200">-</span></div>
-                    <div class="flex justify-between text-xs"><span class="text-gray-400">Phone:</span><span id="state-cust-phone" class="text-gray-200">-</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-gray-400">Name:</span><span id="state-cust-name" class="text-gray-200 font-semibold">-</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-gray-400">Email:</span><span id="state-cust-email" class="text-gray-200 font-mono">-</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-gray-400">Phone:</span><span id="state-cust-phone" class="text-gray-200 font-mono">-</span></div>
                 </div>
             </div>
 
@@ -206,22 +231,58 @@ async def serve_ui():
             <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-3">
                 <span class="text-xs text-gray-400 uppercase tracking-wider font-medium block">Context Variables</span>
                 <div class="space-y-2">
-                    <div class="flex justify-between text-xs"><span class="text-gray-400">Current Order ID:</span><span id="state-order-id" class="text-yellow-400 font-semibold">-</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-gray-400">Current Order ID:</span><span id="state-order-id" class="text-yellow-400 font-mono font-semibold">-</span></div>
                     
                     <div class="border-t border-gray-800/80 pt-2">
                         <span class="text-[10px] text-gray-400 font-medium block mb-1">Return State</span>
-                        <div id="state-return-details" class="text-xs text-gray-300 bg-gray-950/40 p-2 rounded border border-gray-800/50">None</div>
+                        <div id="state-return-details" class="text-xs text-gray-300 bg-gray-950/40 p-2.5 rounded border border-gray-800/50">None</div>
                     </div>
                 </div>
             </div>
 
             <!-- Escalation Details -->
-            <div id="escalation-panel" class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-2 hidden">
+            <div id="escalation-panel" class="bg-gray-900/60 p-4 rounded-xl border border-red-900/40 space-y-2 hidden">
                 <span class="text-xs text-red-400 uppercase tracking-wider font-semibold flex items-center">
                     <span class="w-2 h-2 bg-red-500 rounded-full mr-2 animate-ping"></span>
                     Escalated to Human Agent
                 </span>
                 <div id="escalation-details" class="text-xs text-gray-300 space-y-1"></div>
+            </div>
+
+            <!-- Test Cases quick lookup -->
+            <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-3">
+                <span class="text-xs text-gray-400 uppercase tracking-wider font-medium block">Test Case Database Quick-Click</span>
+                <p class="text-[10px] text-gray-500">Click any order ID to automatically insert it into the chat input field.</p>
+                <div class="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                    <div onclick="selectOrder('TR-4521')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
+                        <span>TR-4521 (Ananya)</span>
+                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-blue-500/20 text-blue-400 font-semibold uppercase">In Transit</span>
+                    </div>
+                    <div onclick="selectOrder('TR-4530')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
+                        <span>TR-4530 (Marcus)</span>
+                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-green-500/20 text-green-400 font-semibold uppercase">Happy Return</span>
+                    </div>
+                    <div onclick="selectOrder('TR-4526')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
+                        <span>TR-4526 (Marcus)</span>
+                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-red-500/20 text-red-400 font-semibold uppercase font-mono">Lost parcel</span>
+                    </div>
+                    <div onclick="selectOrder('TR-4527')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
+                        <span>TR-4527 (Priya)</span>
+                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-orange-500/20 text-orange-400 font-semibold uppercase">Jewellery</span>
+                    </div>
+                    <div onclick="selectOrder('TR-4528')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
+                        <span>TR-4528 (Diego)</span>
+                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-purple-500/20 text-purple-400 font-semibold uppercase">Final Sale</span>
+                    </div>
+                    <div onclick="selectOrder('TR-4523')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
+                        <span>TR-4523 (Priya)</span>
+                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-gray-500/20 text-gray-400 font-semibold uppercase">Expired window</span>
+                    </div>
+                    <div onclick="selectOrder('TR-4525')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
+                        <span>TR-4525 (Diego)</span>
+                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-yellow-500/20 text-yellow-400 font-semibold uppercase">Delayed Order</span>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -241,7 +302,7 @@ async def serve_ui():
                 <div class="flex items-start space-x-3">
                     <div class="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center font-bold text-sm text-yellow-500">AI</div>
                     <div class="bg-gray-800 text-gray-100 p-3 rounded-2xl rounded-tl-none max-w-[85%] text-sm leading-relaxed">
-                        Hello! Welcome to Trendly Support. How can I help you with your shipping or return questions today?
+                        Hello! Welcome to Trendly Support. How can I help you with your shipping, cancellations, or return questions today?
                     </div>
                 </div>
             </div>
@@ -275,9 +336,47 @@ async def serve_ui():
 
     <!-- Frontend logic -->
     <script>
-        const sessionId = "trendly-web-demo";
+        let sessionId = "trendly-web-demo";
         const messageContainer = document.getElementById("chat-messages");
         const tracesContainer = document.getElementById("traces-container");
+
+        function selectOrder(orderId) {
+            const inputField = document.getElementById("user-input");
+            inputField.value = orderId;
+            inputField.focus();
+        }
+
+        async function changeSession(newId) {
+            const cleanId = newId.trim();
+            if (!cleanId) return;
+            sessionId = cleanId;
+            document.getElementById("session-input").value = cleanId;
+            
+            // Reload context for new session ID
+            try {
+                const r = await fetch(`/api/session/${sessionId}`);
+                const data = await r.json();
+                
+                // Reset chat UI and rebuild messages
+                messageContainer.innerHTML = "";
+                if (data.messages && data.messages.length > 0) {
+                    data.messages.forEach(m => appendMessage(m.role, m.content));
+                } else {
+                    messageContainer.innerHTML = `
+                        <div class="flex items-start space-x-3">
+                            <div class="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center font-bold text-sm text-yellow-500">AI</div>
+                            <div class="bg-gray-800 text-gray-100 p-3 rounded-2xl rounded-tl-none max-w-[85%] text-sm leading-relaxed">
+                                Session changed to "${sessionId}". Hello! How can I help you today?
+                            </div>
+                        </div>
+                    `;
+                }
+                updateState(data);
+                document.getElementById("user-input").disabled = data.escalated;
+            } catch (e) {
+                console.error("Error changing session", e);
+            }
+        }
 
         async function resetSession() {
             try {
@@ -298,8 +397,10 @@ async def serve_ui():
         }
 
         function updateState(session) {
+            const modeBadge = document.getElementById("agent-mode-badge");
+            
             if (!session) {
-                document.getElementById("state-auth").className = "text-xs font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400";
+                document.getElementById("state-auth").className = "text-xs font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-mono";
                 document.getElementById("state-auth").innerText = "UNAUTHENTICATED";
                 document.getElementById("state-cust-id").innerText = "-";
                 document.getElementById("state-cust-name").innerText = "-";
@@ -308,18 +409,36 @@ async def serve_ui():
                 document.getElementById("state-order-id").innerText = "-";
                 document.getElementById("state-return-details").innerText = "None";
                 document.getElementById("escalation-panel").classList.add("hidden");
+                modeBadge.className = "hidden";
                 tracesContainer.innerHTML = '<div class="p-3 bg-gray-950/40 rounded-lg border border-gray-850">System initialized. No tools executed in this session yet.</div>';
                 return;
             }
 
+            // LLM Mode status badge
+            modeBadge.className = "ml-3 px-2 py-0.5 text-xs rounded font-semibold uppercase tracking-wider border transition";
+            if (session.llm_active) {
+                modeBadge.className += " bg-purple-500/20 text-purple-400 border-purple-500/30";
+                modeBadge.innerText = "Live LLM Mode";
+            } else {
+                modeBadge.className += " bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+                modeBadge.innerText = "Fallback Planner Mode";
+            }
+
             // Auth update
             if (session.is_authenticated) {
-                document.getElementById("state-auth").className = "text-xs font-semibold px-2 py-0.5 rounded bg-green-500/20 text-green-400";
+                document.getElementById("state-auth").className = "text-xs font-semibold px-2 py-0.5 rounded bg-green-500/20 text-green-400 font-mono";
                 document.getElementById("state-auth").innerText = "AUTHENTICATED";
                 document.getElementById("state-cust-id").innerText = session.customer_id;
                 document.getElementById("state-cust-name").innerText = session.customer_name;
                 document.getElementById("state-cust-email").innerText = session.customer_email;
                 document.getElementById("state-cust-phone").innerText = session.customer_phone;
+            } else {
+                document.getElementById("state-auth").className = "text-xs font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-mono";
+                document.getElementById("state-auth").innerText = "UNAUTHENTICATED";
+                document.getElementById("state-cust-id").innerText = "-";
+                document.getElementById("state-cust-name").innerText = "-";
+                document.getElementById("state-cust-email").innerText = "-";
+                document.getElementById("state-cust-phone").innerText = "-";
             }
 
             // Context update
@@ -328,11 +447,11 @@ async def serve_ui():
             if (session.current_return) {
                 const ret = session.current_return;
                 document.getElementById("state-return-details").innerHTML = `
-                    <div class="space-y-1">
-                        <div><strong>SKU:</strong> ${ret.sku}</div>
+                    <div class="space-y-1 text-xs">
+                        <div><strong>SKU:</strong> <span class="font-mono text-yellow-500">${ret.sku}</span></div>
                         <div><strong>Status:</strong> <span class="${ret.validation_status === 'APPROVED' ? 'text-green-400' : 'text-red-400'} font-semibold">${ret.validation_status}</span></div>
-                        <div><strong>Reason:</strong> ${ret.reason}</div>
-                        ${ret.refund_deduction > 0 ? `<div class="text-orange-400"><strong>Deduction:</strong> \u20b9${ret.refund_deduction}</div>` : ''}
+                        <div><strong>Reason:</strong> ${ret.reason.replace('_', ' ')}</div>
+                        ${ret.refund_deduction > 0 ? `<div class="text-orange-400"><strong>Box Deduction:</strong> \u20b9${ret.refund_deduction}</div>` : ''}
                     </div>
                 `;
             } else {
@@ -351,6 +470,9 @@ async def serve_ui():
                     </div>
                 `;
                 document.getElementById("user-input").disabled = true;
+            } else {
+                document.getElementById("escalation-panel").classList.add("hidden");
+                document.getElementById("user-input").disabled = false;
             }
 
             // Update traces
@@ -359,14 +481,14 @@ async def serve_ui():
                     <div class="p-3 bg-gray-950/45 rounded-lg border border-gray-800 space-y-1.5">
                         <div class="flex justify-between items-center text-gray-300">
                             <span class="text-yellow-400 font-semibold">🔧 Tool Execution: ${t.tool_name}</span>
-                            <span class="text-[10px] text-gray-500">${t.timestamp}</span>
+                            <span class="text-[10px] text-gray-500 font-mono">${t.timestamp}</span>
                         </div>
                         <div class="grid grid-cols-2 gap-2 mt-1">
-                            <div><span class="text-gray-500">Inputs:</span> <pre class="bg-gray-900/60 p-1.5 rounded border border-gray-800/40 text-[10px] text-gray-300">${JSON.stringify(t.inputs, null, 2)}</pre></div>
-                            <div><span class="text-gray-500">Outputs:</span> <pre class="bg-gray-900/60 p-1.5 rounded border border-gray-800/40 text-[10px] text-gray-300">${JSON.stringify(t.outputs, null, 2)}</pre></div>
+                            <div><span class="text-gray-500">Inputs:</span> <pre class="bg-gray-900/60 p-1.5 rounded border border-gray-800/40 text-[10px] text-gray-355 overflow-x-auto">${JSON.stringify(t.inputs, null, 2)}</pre></div>
+                            <div><span class="text-gray-500">Outputs:</span> <pre class="bg-gray-900/60 p-1.5 rounded border border-gray-800/40 text-[10px] text-gray-355 overflow-x-auto">${JSON.stringify(t.outputs, null, 2)}</pre></div>
                         </div>
                     </div>
-                `).join('');
+                `).reverse().join(''); // Show latest traces on top
             }
         }
 
@@ -401,12 +523,12 @@ async def serve_ui():
         function appendMessage(role, text) {
             const isUser = role === "user";
             const avatar = isUser ? "U" : "AI";
-            const bgClass = isUser ? "bg-gradient-to-r from-yellow-400/20 to-orange-500/20 border border-yellow-500/10 text-gray-100 rounded-tr-none" : "bg-gray-800 text-gray-100 rounded-tl-none";
-            const avatarBg = isUser ? "bg-yellow-500/20 text-yellow-400" : "bg-gray-800 text-yellow-500";
+            const bgClass = isUser ? "bg-gradient-to-r from-yellow-400/25 to-orange-500/25 border border-yellow-500/10 text-gray-100 rounded-tr-none" : "bg-gray-800 text-gray-100 rounded-tl-none";
+            const avatarBg = isUser ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" : "bg-gray-800 text-yellow-500 border border-gray-700";
             
             const messageHtml = `
                 <div class="flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${avatarBg}">${avatar}</div>
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm border ${avatarBg}">${avatar}</div>
                     <div class="${bgClass} p-3 rounded-2xl max-w-[85%] text-sm leading-relaxed white-space-pre-wrap">${text.replace(/\\n/g, '<br>')}</div>
                 </div>
             `;

@@ -61,3 +61,19 @@ def test_agent_lost_parcel_escalation():
     session = get_or_create_session(session_id)
     assert session.escalated is True
     assert session.escalation_summary["priority"] == "HIGH"
+
+def test_agent_order_cancellation():
+    agent = AgentOrchestrator()
+    session_id = "agent-test-5"
+
+    # Authenticate as Ananya Rao
+    agent.process_message(session_id, "Hi, my email is ananya.rao@example.com")
+
+    # Try to cancel TR-4521 (In Transit)
+    resp = agent.process_message(session_id, "Please cancel TR-4521")
+    assert "cannot cancel" in resp.lower() or "dispatched" in resp.lower()
+
+    # Try to cancel TR-4529 (Already Cancelled)
+    resp2 = agent.process_message(session_id, "Cancel order TR-4529")
+    assert "already" in resp2.lower() or "cancelled" in resp2.lower()
+
