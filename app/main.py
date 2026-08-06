@@ -72,7 +72,7 @@ def _format_session_response(session: ConversationSession) -> SessionResponse:
         escalation_summary=session.escalation_summary,
         messages=session.messages,
         tool_traces=[t.dict() for t in session.tool_traces],
-        llm_active=orchestrator.use_api
+        llm_active=orchestrator.use_llm
     )
 
 # REST API Endpoints
@@ -249,41 +249,7 @@ async def serve_ui():
                 <div id="escalation-details" class="text-xs text-gray-300 space-y-1"></div>
             </div>
 
-            <!-- Test Cases quick lookup -->
-            <div class="bg-gray-900/60 p-4 rounded-xl border border-gray-800 space-y-3">
-                <span class="text-xs text-gray-400 uppercase tracking-wider font-medium block">Test Case Database Quick-Click</span>
-                <p class="text-[10px] text-gray-500">Click any order ID to automatically insert it into the chat input field.</p>
-                <div class="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-                    <div onclick="selectOrder('TR-4521')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
-                        <span>TR-4521 (Ananya)</span>
-                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-blue-500/20 text-blue-400 font-semibold uppercase">In Transit</span>
-                    </div>
-                    <div onclick="selectOrder('TR-4530')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
-                        <span>TR-4530 (Marcus)</span>
-                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-green-500/20 text-green-400 font-semibold uppercase">Happy Return</span>
-                    </div>
-                    <div onclick="selectOrder('TR-4526')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
-                        <span>TR-4526 (Marcus)</span>
-                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-red-500/20 text-red-400 font-semibold uppercase font-mono">Lost parcel</span>
-                    </div>
-                    <div onclick="selectOrder('TR-4527')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
-                        <span>TR-4527 (Priya)</span>
-                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-orange-500/20 text-orange-400 font-semibold uppercase">Jewellery</span>
-                    </div>
-                    <div onclick="selectOrder('TR-4528')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
-                        <span>TR-4528 (Diego)</span>
-                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-purple-500/20 text-purple-400 font-semibold uppercase">Final Sale</span>
-                    </div>
-                    <div onclick="selectOrder('TR-4523')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
-                        <span>TR-4523 (Priya)</span>
-                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-gray-500/20 text-gray-400 font-semibold uppercase">Expired window</span>
-                    </div>
-                    <div onclick="selectOrder('TR-4525')" class="p-2 bg-gray-950/45 rounded border border-gray-850 hover:border-yellow-500/50 cursor-pointer transition flex justify-between items-center text-xs">
-                        <span>TR-4525 (Diego)</span>
-                        <span class="px-1.5 py-0.5 text-[9px] rounded bg-yellow-500/20 text-yellow-400 font-semibold uppercase">Delayed Order</span>
-                    </div>
-                </div>
-            </div>
+
         </section>
 
         <!-- Middle Panel: Chat Interface -->
@@ -340,11 +306,7 @@ async def serve_ui():
         const messageContainer = document.getElementById("chat-messages");
         const tracesContainer = document.getElementById("traces-container");
 
-        function selectOrder(orderId) {
-            const inputField = document.getElementById("user-input");
-            inputField.value = orderId;
-            inputField.focus();
-        }
+
 
         async function changeSession(newId) {
             const cleanId = newId.trim();
