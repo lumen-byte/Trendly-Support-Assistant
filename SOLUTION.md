@@ -1,10 +1,23 @@
 # Solution Note & Discovery Questions (SOLUTION.md)
 
-This document provides a review of the solution, architectural trade-offs, limitations, and product discovery questions.
+This document outlines the system architecture, key trade-offs, known limitations, and operational product discovery questions for the Trendly Support Assistant.
 
 ---
 
-## 1. Key Trade-offs
+## 1. System Architecture
+
+The Trendly Support Assistant utilizes a decoupled, deterministic agent architecture that separates natural language understanding (planning) from database access and business logic execution.
+
+### Architectural Components
+1. **Safety Interceptor Layer (safety.py)**: Incoming messages are audited for PII leakage (credit cards, CVVs, routing numbers) and prompt injection attempts before reaching the planner. If a security exception is triggered, the session is locked and escalated immediately.
+2. **ReAct Planner Orchestration Loop (agent.py)**: Decides whether to invoke tools or generate a direct conversational response. If a valid Gemini API Key is configured, it executes a ReAct planning loop using Gemini 1.5 Flash. If offline/no key is found, it falls back to a rule-based orchestrator that parses intents using a deterministic regex/keyword decision flow.
+3. **Deterministic Rules Engine (rules.py)**: Enforces business logic policies. The planner cannot decide return eligibility or refund values; it can only invoke `calculate_return_eligibility()` or `claim_delay_compensation()`, which execute code-based validations and return structured, immutable eligibility schemas.
+4. **Order Engine DB Layer (database.py)**: A read-write database layer that queries customer records and orders from `orders.json`. Enforces cross-customer query isolation by verifying that the authenticated user matches the order owner.
+5. **RAG Policy Engine (rag.py)**: Semantic retrieval utilizing character/section chunking. Implements query synonym expansion to map user expressions (such as "earrings", "socks") to policy terms ("jewellery", "innerwear").
+
+---
+
+## 2. Key Trade-offs
 
 ### A. Deterministic Rule Engine vs. LLM Eligibility Reasoning
 *   **Approach**: All return and compensation eligibility checks are calculated in pure Python (`rules.py`), and the LLM is only used to translate these rules into conversational explanations.
@@ -20,7 +33,7 @@ This document provides a review of the solution, architectural trade-offs, limit
 
 ---
 
-## 2. Known Limitations
+## 3. Known Limitations
 
 1.  **Stateless API**: The FastAPI layer stores state in an in-memory dictionary. If the uvicorn process restarts, all conversation sessions are reset.
 2.  **Size Exchanges**: Size exchanges are evaluated, but because the database does not include real-time warehouse inventory tables, we assume the requested size is available. In a production system, we would call an inventory API.
@@ -28,7 +41,7 @@ This document provides a review of the solution, architectural trade-offs, limit
 
 ---
 
-## 3. Product Discovery Questions (Trendly Ops Team)
+## 4. Product Discovery Questions (Trendly Ops Team)
 
 These questions focus on operational and business architecture, demonstrating product thinking:
 
